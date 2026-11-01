@@ -123,11 +123,19 @@ PRIVACY_CAPTIONS = {
 }
 
 
+TABLE_IMG_ADJ = 4  # DEMO: minihtml draws an image 4 px taller than its height attribute
+
+
 def _serialise_image(
     node: ElementNode,
     results: Dict[AssetKey, AssetResult],
     privacy_seen: Set[AssetKind],
 ) -> str:
+    _uri = node.attrs.get("data-table-uri")
+    if _uri:
+        return '<img src="{}" alt="table" width="{}" height="{}">'.format(
+            _attr(_uri), int(node.attrs["data-w"]), int(node.attrs["data-h"]) - TABLE_IMG_ADJ
+        )
     key = node.asset_key
     result = results.get(key) if key is not None else None
     if isinstance(result, Ready):

@@ -395,6 +395,12 @@ def parse(
         request.settings.table_max_columns,
     )
     _number_ordered_lists(parser.roots)
+    _g = replace_tables.__globals__
+    _g["IMAGE_PX"] = (
+        max(0.0, request.viewport_width - _g["CHROME_REM"] * root_font_px(request.zoom))
+        if request.viewport_width > 0
+        else 0.0
+    )
     replace_tables(parser.roots, latin, cjk)
 
     return StructuredDoc(

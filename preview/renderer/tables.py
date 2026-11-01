@@ -22,6 +22,7 @@ yet it falls back to a width that suits a narrow group.
 """
 
 import math
+import os
 import re
 import sys
 import unicodedata
@@ -439,7 +440,82 @@ def budgets(viewport_width: float, rem_px: int, cap: int) -> Tuple[int, int]:
     )
 
 
+# ---- DEMO: tables drawn as images by a helper process that measures the real font files ----
+IMAGE_PX = 0.0  # set by structure.py from the pane width; 0 keeps the old text layout
+_DEMO_PY = os.environ.get("MDGLANCE_TABLE_PYTHON", r"C:\Program Files\Python314\python.exe")  # needs Pillow
+_DEMO_CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "experiments", "table_render", "table_render_cli.py")
+_DEMO_CACHE = {}
+
+
+def _cell_styled(cell):
+    """Cell text with zero-width style markers: U+E000/E001 bold on/off, U+E002/E003 italic on/off."""
+    pieces = []
+
+    def collect(nodes):
+        for child in nodes:
+            if isinstance(child, TextNode):
+                pieces.append(child.text)
+                continue
+            on = off = ""
+            if child.tag in ("strong", "b"):
+                on, off = "\ue000", "\ue001"
+            elif child.tag in ("em", "i"):
+                on, off = "\ue002", "\ue003"
+            pieces.append(on)
+            collect(child.children)
+            pieces.append(off)
+
+    collect(cell.children)
+    return " ".join("".join(pieces).split())
+
+
+def _image_table(table):
+    import base64
+    import json
+    import subprocess
+
+    rows = _rows(table)
+    if not rows or IMAGE_PX < 200:
+        return None
+    head = [r for r in rows if r[0]]
+    body = [r for r in rows if not r[0]]
+    head_cells = head[0][1] if head else rows[0][1]
+    body_rows = body if head else rows[1:]
+    spec = {
+        "header": [_cell_styled(c) for c in head_cells],
+        "rows": [[_cell_styled(c) for c in cells] for _, cells in body_rows],
+        "aligns": [{"right": "r", "center": "c"}.get(_alignment(c), "l") for c in head_cells],
+        "pane": int(IMAGE_PX),
+    }
+    key = json.dumps(spec, sort_keys=True, ensure_ascii=False)
+    uri = _DEMO_CACHE.get(key)
+    if uri is None:
+        try:
+            done = subprocess.run(
+                [_DEMO_PY, _DEMO_CLI],
+                input=key.encode("utf-8"),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                creationflags=0x08000000,
+            )
+        except Exception:
+            return None
+        if done.returncode != 0:
+            return None
+        line, _, png = done.stdout.partition(b"\n")
+        width, height = [int(v) for v in line.split()]
+        uri = (width, height, "data:image/png;base64," + base64.b64encode(png).decode("ascii"))
+        _DEMO_CACHE[key] = uri
+    width, height, data = uri
+    image = ElementNode("img", {"data-table-uri": data, "data-w": str(width), "data-h": str(height), "alt": "table"}, generated=True)
+    return ElementNode("div", {"class": "md-table-image"}, [image], generated=True)
+
+
 def _table_node(table: ElementNode, latin: int, cjk: int) -> ElementNode:
+    demo = _image_table(table)
+    if demo is not None:
+        return demo
     rows = _rows(table)
     wide = _has_cjk(rows)
     ambiguous = 2 if wide else 1
