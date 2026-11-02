@@ -97,3 +97,38 @@ are East Asian Wide too.
   stack is named, so they keep the Latin font and still count two columns.
   `_is_cjk` treats the wide characters below U+2E80 (except Hangul Jamo) and
   those from U+1F000 to U+1FFFF as emoji.
+
+## Amendment: the advance is measured, not assumed
+
+The first consequence above -- "the budget depends on a font advance the
+renderer cannot query" -- was taken as a given, and the two advances were the
+Linux measurements: 0.6023 em for `DejaVu Sans Mono` and 0.5 em for
+`Noto Sans Mono CJK`. That is right for Linux and for macOS, whose `Menlo` is
+0.6023 em too, and wrong for Windows, whose `Consolas` is 0.55 em: every
+Windows table was budgeted about a tenth narrower than the group it sits in,
+and wrapped early.
+
+- **`preview/renderer/font_metrics.py` reads the advance from the font file**
+  the stylesheet's stack resolves to, in the same order and under the same
+  names as `resources/preview.css`, with `monospace` resolving to Menlo,
+  Consolas or DejaVu by platform. `tables` and `measure` import the result, so
+  `budgets()` and `outline_width_px()` agree with the host.
+- **Pillow is the reader, and it is a Package Control library** (`pillow`,
+  `macos-arm64, macos-x64, linux-arm64, linux-x64, windows-x32, windows-x64`),
+  so no helper process and no interpreter hunt are involved. It is used only
+  for `ImageFont.getlength` at a sample size large enough for the fraction to
+  be exact to several places; nothing is drawn. It is imported the first time
+  a table or an outline asks for an advance and the result is cached, so
+  plugin load still imports no library (ADR 0012).
+- **Pillow is optional at run time.** A host where it has not been installed
+  yet, a missing font, or a file Pillow cannot open keeps the Linux constants,
+  which is the behaviour that shipped before. Only the metric degrades, never
+  the preview.
+- **`CJK_FONT_SHIPS` now means what it says**: the CJK font is installed,
+  rather than the platform being Linux. A Windows or macOS reader who installs
+  one of those fonts gets the 0.5 em budget the font actually has.
+- **The residual error is unchanged.** A measured advance still rounds up to
+  whole pixels, and a family installed at a path not listed above is still
+  budgeted at the fallback. A host whose fontconfig substitutes a different
+  face for a name in the stack cannot be detected from Python; the stylesheet
+  remains the statement of intent and the metric follows it.

@@ -194,7 +194,7 @@ class TableTest(unittest.TestCase):
             self.assertLessEqual(sum(width(cell) for cell in cells), columns, cells)
 
     def test_without_the_cjk_font_a_cjk_table_wraps_within_the_latin_budget(self):
-        with mock.patch.object(tables, "CJK_FONT_SHIPS", False):
+        with mock.patch.object(tables, "cjk_ships", return_value=False):
             columns = budgets(950.0, 16, 200)[0]
             lines = rows(CJK_HEADER, viewport_width=950.0)
         for _, cells in lines:
@@ -232,21 +232,23 @@ class BudgetTest(unittest.TestCase):
         self.assertLess(narrow[1], wide[1])
 
     def test_the_cjk_font_fits_more_columns_than_the_latin_one(self):
-        with mock.patch.object(tables, "CJK_FONT_SHIPS", True):
+        with mock.patch.object(tables, "cjk_ships", return_value=True):
             latin, cjk = budgets(900.0, 16, 200)
         self.assertGreater(cjk, latin)
 
     def test_a_host_without_the_cjk_font_counts_cjk_at_the_latin_advance(self):
         # Windows and macOS ship none of the CJK stack, so a CJK table there is
         # set in `monospace`, no narrower than the Latin font (issue #9).
-        with mock.patch.object(tables, "CJK_FONT_SHIPS", False):
+        with mock.patch.object(tables, "cjk_ships", return_value=False):
             latin, cjk = budgets(900.0, 16, 200)
         self.assertEqual(cjk, latin)
 
     def test_the_advance_is_rounded_up_to_whole_pixels(self):
         # A 904 px preview measured on ST 4200: 82 columns of 10 px fit inside
-        # it, not the 85 that an unrounded 9.64 px advance would suggest.
-        self.assertEqual(budgets(904.0, 16, 200)[0], 81)
+        # it, not the 85 that an unrounded 9.64 px advance would suggest. The
+        # advance is pinned so the test says the same thing on every host.
+        with mock.patch.object(tables, "latin_advance", return_value=0.6023):
+            self.assertEqual(budgets(904.0, 16, 200)[0], 81)
 
     def test_the_setting_caps_the_measured_width(self):
         self.assertEqual(budgets(1600.0, 16, 40)[0], 40)

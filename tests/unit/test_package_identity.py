@@ -63,7 +63,7 @@ class PackageIdentityTest(unittest.TestCase):
         with open(os.path.join(ROOT, name), encoding="utf-8") as source:
             return json.load(source)
 
-    def test_metadata_is_st4200_every_platform_and_two_libraries(self):
+    def test_metadata_is_st4200_every_platform_and_three_libraries(self):
         metadata = self.load("docs/package-control-entry.json")
         self.assertEqual(metadata["name"], "MarkdownGlance")
         release = metadata["releases"][0]
@@ -72,10 +72,11 @@ class PackageIdentityTest(unittest.TestCase):
         self.assertIs(release["tags"], True)
         self.assertEqual(metadata["labels"], ["markdown", "preview"])
         # The parser and its fence extension come from Package Control, on
-        # every platform and host (ADR 0012). Nothing else is installed.
+        # every platform and host (ADR 0012), and so does Pillow, which only
+        # measures the monospace advance and is optional at run time.
         self.assertEqual(
             self.load("dependencies.json"),
-            {"*": {"*": ["Markdown", "pymdown-extensions"]}},
+            {"*": {"*": ["Markdown", "pymdown-extensions", "pillow"]}},
         )
         self.assertFalse(os.path.exists(os.path.join(ROOT, "lib")))
 

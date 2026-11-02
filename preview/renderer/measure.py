@@ -18,7 +18,8 @@ import math
 import unicodedata
 from typing import Mapping, Sequence
 
-from .tables import LATIN_ADVANCE, WIDE_WIDTHS
+from .font_metrics import latin_advance
+from .tables import WIDE_WIDTHS
 
 THIN = frozenset(" ilj.,;:!|'`")
 NARROW = frozenset('ftrIJ()[]{}/\\-"')
@@ -107,7 +108,7 @@ def outline_width_px(headings: Sequence, rem_px: int) -> float:
     """
     if rem_px <= 0:
         return 0.0
-    advance = math.ceil(LATIN_ADVANCE * rem_px)
+    advance = math.ceil(latin_advance() * rem_px)
     widest = max(
         (
             _indent_rem(heading.level, OUTLINE_INDENT_REM, 6.5) * rem_px

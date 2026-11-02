@@ -290,5 +290,5 @@ write; Auto Save After Delay saves the file when I pause typing.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). The `Markdown` and `pymdown-extensions` libraries
-are installed through Package Control and have their own licenses.
+MIT. See [LICENSE](LICENSE). The `Markdown`, `pymdown-extensions` and `pillow`
+libraries are installed through Package Control and have their own licenses.

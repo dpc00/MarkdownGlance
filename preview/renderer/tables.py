@@ -19,14 +19,19 @@ The budget comes from the measured preview width, so a table fills the group it
 is in and re-fits when the window is resized. `budgets()` converts pixels to
 characters for both fonts the stylesheet can pick; when the width is not known
 yet it falls back to a width that suits a narrow group.
+
+The advance of one character is not assumed here: `font_metrics` reads it from
+the font file the host's stylesheet stack resolves to, so a table fits the
+preview on Windows and macOS as well as on the Linux host the first constants
+were measured on.
 """
 
 import math
 import re
-import sys
 import unicodedata
 from typing import List, Optional, Sequence, Tuple
 
+from .font_metrics import cjk_advance, cjk_ships, latin_advance
 from .model import ElementNode, Node, TextNode
 
 NBSP = "\u00a0"
@@ -38,16 +43,16 @@ DROPPED_CELL_TAGS = frozenset(("br",))
 WIDE_WIDTHS = frozenset(("W", "F"))
 
 # Advance of one character as a fraction of the font size, for the two stacks
-# in the stylesheet: DejaVu Sans Mono, and Noto Sans Mono CJK for a CJK table.
-# minihtml rounds the advance up to whole pixels — measured 10 px, not 9.64,
-# at a 16 px root — so `budgets` rounds the same way rather than overshooting.
-LATIN_ADVANCE = 0.6023
-CJK_ADVANCE = 0.5
-# The CJK stack names fonts that a Linux desktop installs with its CJK support
-# and that neither Windows nor macOS ships. Without one the table is set in
-# `monospace` -- Consolas, Menlo, Courier -- at no more than the Latin advance,
-# and a budget counted at 0.5 em overflows the preview by a fifth.
-CJK_FONT_SHIPS = sys.platform.startswith("linux")
+# in the stylesheet, measured by `font_metrics` from the font this host
+# resolves. minihtml rounds the advance up to whole pixels -- measured 10 px,
+# not 9.64, at a 16 px root on the Linux host -- so `budgets` rounds the same
+# way rather than overshooting.
+#
+# `cjk_ships()` says whether the CJK stack's fonts are installed. Without one
+# the table is set in `monospace` -- Consolas, Menlo, Courier -- at no more
+# than the Latin advance, and a budget counted at 0.5 em overflows the preview
+# by a fifth.
+#
 # Body padding (1.5rem each side), table padding (1rem) and border (0.08rem).
 CHROME_REM = 5.16
 # One column for the scrollbar and for rounding in the host's own measurement.
@@ -429,13 +434,14 @@ def budgets(viewport_width: float, rem_px: int, cap: int) -> Tuple[int, int]:
     if viewport_width <= 0 or rem_px <= 0:
         return fallback, fallback
     content = viewport_width - CHROME_REM * rem_px
-    cjk_advance = CJK_ADVANCE if CJK_FONT_SHIPS else LATIN_ADVANCE
+    latin = latin_advance()
+    cjk = cjk_advance() if cjk_ships() else latin
     return tuple(  # type: ignore[return-value]
         max(
             MIN_COLUMN,
             min(cap, int(content // math.ceil(advance * rem_px)) - SAFETY_COLUMNS),
         )
-        for advance in (LATIN_ADVANCE, cjk_advance)
+        for advance in (latin, cjk)
     )
 
 

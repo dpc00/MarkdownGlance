@@ -1,6 +1,8 @@
+import math
 import unittest
 
 from MarkdownGlance.preview.domain.contracts import Heading, SourceHeading
+from MarkdownGlance.preview.renderer.font_metrics import latin_advance
 from MarkdownGlance.preview.renderer.measure import (
     mono_columns,
     outline_width_px,
@@ -76,8 +78,10 @@ class OutlineWidthTest(unittest.TestCase):
     def test_the_marker_and_the_indent_are_counted(self):
         deep = outline_width_px(source_headings((3, "Manually")), REM)
         shallow = outline_width_px(source_headings((1, "Manually")), REM)
-        # Two levels of indent (2.3rem) and two more `#` in the marker.
-        self.assertAlmostEqual(deep - shallow, 2.3 * REM + 2 * 10)
+        # Two levels of indent (2.3rem) and two more `#` in the marker, each at
+        # the measured advance rounded up the way minihtml rounds it.
+        advance = math.ceil(latin_advance() * REM)
+        self.assertAlmostEqual(deep - shallow, 2.3 * REM + 2 * advance)
 
     def test_an_untitled_heading_is_measured_by_its_placeholder(self):
         self.assertEqual(

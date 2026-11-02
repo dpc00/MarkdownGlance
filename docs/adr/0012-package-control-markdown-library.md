@@ -147,3 +147,12 @@ on 2026-10-10:
   | --- | --- | --- |
   | 4200, Python 3.8.12 | Markdown 3.2.2 + pymdown-extensions 8.1.1 | 393 ms |
   | 4215, Python 3.14.6 | Markdown 3.11 + pymdown-extensions 12.1 | 258 ms |
+
+## Amendment: Pillow, for the table advance
+
+`dependencies.json` also declares `pillow`, which
+[ADR 0007](0007-table-rendering-under-minihtml.md) uses to measure the
+monospace advance the table budget needs. The rule above still holds: it is
+imported on the first table or outline that needs an advance, never at plugin
+load, and a host without it keeps the Linux constants rather than failing.
+Nothing is drawn with it, so the package still ships no image renderer.

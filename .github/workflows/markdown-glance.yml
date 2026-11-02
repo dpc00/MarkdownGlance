@@ -16,11 +16,14 @@ jobs:
         python-version: ["3.8", "3.14"]
         # The parser is a Package Control library, and the channel serves a
         # different release to each plugin host: this pins what each host gets.
+        # Pillow measures the monospace advance; it is optional at run time, but
+        # the measured path is the one worth testing. 10.4 is the last release
+        # that supports Python 3.8.
         include:
           - python-version: "3.8"
-            libraries: "Markdown==3.2.2 pymdown-extensions==8.1.1"
+            libraries: "Markdown==3.2.2 pymdown-extensions==8.1.1 pillow==10.4.0"
           - python-version: "3.14"
-            libraries: "Markdown==3.11 pymdown-extensions==12.1"
+            libraries: "Markdown==3.11 pymdown-extensions==12.1 pillow==13.0.0"
         exclude:
           # macOS runners are arm64 and setup-python publishes no 3.8 build for
           # them, so macOS covers 3.14 only. Linux and Windows cover 3.8.

@@ -6,11 +6,13 @@ Issues and pull requests are welcome.
 
 The parser is the Package Control `Markdown` library, so the tests need it and
 `pymdown-extensions` installed. Package Control serves a different release to
-each plugin host; install the pair for the Python you are running:
+each plugin host; install the pair for the Python you are running. `pillow`
+measures the table advance and is optional: without it the tests still pass,
+against the Linux constants.
 
 ```bash
-python -m pip install "Markdown==3.2.2" "pymdown-extensions==8.1.1"  # Python 3.8, build 4200
-python -m pip install "Markdown==3.11" "pymdown-extensions==12.1"    # Python 3.14, build 4213 and later
+python -m pip install "Markdown==3.2.2" "pymdown-extensions==8.1.1" "pillow==10.4.0"  # Python 3.8, build 4200
+python -m pip install "Markdown==3.11" "pymdown-extensions==12.1" "pillow==13.0.0"    # Python 3.14, build 4213 and later
 ```
 
 The package imports itself as `MarkdownGlance.preview`, so the checkout
