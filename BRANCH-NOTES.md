@@ -4,6 +4,13 @@
 **Not a formal pull request yet** — this file is the write-up, committed to the
 branch so it can be read from GitHub alongside the code.
 
+## Links
+
+- Branch: <https://github.com/dpc00/MarkdownGlance/tree/fix/measured-mono-advance>
+- This file: <https://github.com/dpc00/MarkdownGlance/blob/fix/measured-mono-advance/BRANCH-NOTES.md>
+- Diff against `feibuilds/main`:
+  <https://github.com/feibuilds/MarkdownGlance/compare/main...dpc00:fix/measured-mono-advance>
+
 ## Why
 
 `tables.budgets()` turns the preview's pixel width into a column count, and
