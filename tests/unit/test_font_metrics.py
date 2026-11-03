@@ -7,6 +7,7 @@ from unittest import mock
 
 from MarkdownGlance.preview.renderer import font_metrics
 from MarkdownGlance.preview.renderer.font_metrics import (
+    CJK_FONT,
     FALLBACK_CJK_ADVANCE,
     FALLBACK_LATIN_ADVANCE,
     LATIN_FONT,
@@ -73,7 +74,68 @@ class AdvanceTest(unittest.TestCase):
         self.assertEqual(cjk_ships(), font_metrics.CJK_FONT is not None)
 
 
+class RegistryTest(unittest.TestCase):
+    """A font installed for one user is registered in HKCU, not under C:\\Windows."""
+
+    def _fonts(self, entries):
+        with mock.patch.object(font_metrics.os.path, "isfile", return_value=True):
+            return font_metrics._fonts_from_entries(entries)
+
+    def test_a_face_name_yields_its_family(self):
+        fonts = self._fonts(
+            [
+                ("DejaVu Sans Mono Bold (TrueType)", r"C:\f\DejaVuSansMono-Bold.ttf"),
+                ("DejaVu Sans Mono (TrueType)", r"C:\f\DejaVuSansMono.ttf"),
+            ]
+        )
+        self.assertEqual(fonts["DejaVu Sans Mono"], r"C:\f\DejaVuSansMono.ttf")
+        self.assertNotIn("DejaVu Sans Mono Bold", fonts)
+
+    def test_a_regular_face_wins_whichever_order_it_is_registered_in(self):
+        fonts = self._fonts(
+            [
+                ("Consolas (TrueType)", r"C:\f\consola.ttf"),
+                ("Consolas Bold (TrueType)", r"C:\f\consolab.ttf"),
+            ]
+        )
+        self.assertEqual(fonts["Consolas"], r"C:\f\consola.ttf")
+
+    def test_a_registry_name_that_ends_in_a_style_word(self):
+        # Windows registers Noto's regular face with "Regular" in the name.
+        fonts = self._fonts(
+            [("Noto Sans Mono CJK SC Regular (OpenType)", r"C:\f\Noto.otf")]
+        )
+        self.assertEqual(fonts["Noto Sans Mono CJK SC"], r"C:\f\Noto.otf")
+
+    def test_a_registered_file_that_is_gone_is_skipped(self):
+        self.assertEqual(
+            font_metrics._fonts_from_entries([("Ghost (TrueType)", r"C:\nope\x.ttf")]),
+            {},
+        )
+
+    def test_the_registry_is_asked_before_the_built_in_paths(self):
+        with mock.patch.object(
+            font_metrics, "_registry_fonts", return_value={"Consolas": __file__}
+        ):
+            with mock.patch.dict(
+                font_metrics._FAMILY_FILES, {"Consolas": ("C:/nope.ttf",)}, clear=True
+            ):
+                self.assertEqual(font_metrics._installed("Consolas"), __file__)
+
+    def test_a_family_the_registry_does_not_name_falls_back_to_the_paths(self):
+        with mock.patch.object(font_metrics, "_registry_fonts", return_value={}):
+            with mock.patch.dict(
+                font_metrics._FAMILY_FILES, {"Consolas": (__file__,)}, clear=True
+            ):
+                self.assertEqual(font_metrics._installed("Consolas"), __file__)
+
+
 class ResolveTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(font_metrics, "_registry_fonts", return_value={})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_the_first_installed_family_wins(self):
         with mock.patch.dict(
             font_metrics._FAMILY_FILES,
@@ -106,17 +168,37 @@ class ResolveTest(unittest.TestCase):
             self.assertEqual(latin_advance(), FALLBACK_LATIN_ADVANCE)
             return
         name = os.path.basename(LATIN_FONT).lower()
-        expected = GENERIC_FILES.get(sys.platform, LINUX_FILES)
-        self.assertIn(name, tuple(n.lower() for n in expected))
+        # Every name in the stylesheet's stack, whichever host supplies it:
+        # DejaVu and Liberation can be installed by hand on Windows too.
+        expected = (
+            "dejavusansmono.ttf",
+            "liberationmono-regular.ttf",
+            "consola.ttf",
+            "cour.ttf",
+            "menlo.ttc",
+        )
+        self.assertIn(name, expected)
 
-    def test_windows_measures_consolas_rather_than_the_linux_constant(self):
-        # Consolas is 0.55 em where DejaVu Sans Mono is 0.6023, so a budget
-        # built on the Linux constant leaves a Windows table about a tenth of
-        # the width the preview could give it.
-        if not sys.platform.startswith("win"):
-            self.skipTest("only Windows ships Consolas")
-        self.assertIsNotNone(LATIN_FONT)
-        self.assertNotEqual(latin_advance(), FALLBACK_LATIN_ADVANCE)
+
+class AdvanceMatchesTheDrawnFontTest(unittest.TestCase):
+    def test_the_advance_comes_from_the_resolved_font(self):
+        if LATIN_FONT is None:
+            self.skipTest("no font to measure")
+        measured = font_metrics.advance(LATIN_FONT, "M")
+        if measured is None:
+            self.skipTest("Pillow is not installed")
+        self.assertEqual(latin_advance(), measured)
+
+    def test_the_cjk_advance_is_one_column_not_two(self):
+        # A wide character is two columns; the budget needs the column.
+        if CJK_FONT is None:
+            self.skipTest("no CJK font installed")
+        column = font_metrics.advance(CJK_FONT, "M")
+        wide = font_metrics.advance(CJK_FONT, "\u4e2d")
+        if column is None or wide is None:
+            self.skipTest("Pillow is not installed")
+        self.assertAlmostEqual(cjk_advance(), column, places=3)
+        self.assertAlmostEqual(wide, column * 2, places=2)
 
 
 if __name__ == "__main__":

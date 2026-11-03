@@ -115,6 +115,105 @@ def _existing(paths):
     return None
 
 
+# The registry names a face, not a family: "DejaVu Sans Mono Bold (TrueType)".
+# The family is the name without one of these trailing words.
+_STYLE_WORDS = (
+    "regular", "book", "roman", "bold", "italic", "oblique", "light",
+    "medium", "semibold", "semi bold", "black", "thin", "extralight",
+    "extra light", "demibold", "demi bold",
+)
+
+_REGISTRY_KEY = r"Software\Microsoft\Windows NT\CurrentVersion\Fonts"
+_REGISTRY_FONTS = None
+
+
+def _registry_entries():
+    """Every face Windows has registered, as (face name, absolute path).
+
+    Both hives matter: a font installed for one user lives outside
+    `C:\\Windows\\Fonts` and is registered under HKEY_CURRENT_USER, while a
+    system-wide install is registered under HKEY_LOCAL_MACHINE. minihtml sees
+    both, so a resolver that only walks the system directory misses half the
+    fonts a user can actually see.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return []
+    windows_dir = os.environ.get("WINDIR") or r"C:\Windows"
+    entries = []
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            key = winreg.OpenKey(hive, _REGISTRY_KEY)
+        except OSError:
+            continue
+        with key:
+            index = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                index += 1
+                if not isinstance(value, str):
+                    continue
+                path = value
+                if not HOST.is_absolute(path):
+                    path = os.path.join(windows_dir, "Fonts", path)
+                entries.append((str(name), path))
+    return entries
+
+
+def _fonts_from_entries(entries):
+    """Map family name to its regular face, from (face name, path) pairs."""
+    found = {}
+    for face, path in entries:
+        if not path or not os.path.isfile(path):
+            continue
+        name = face.strip()
+        for tag in ("(TrueType)", "(OpenType)", "(Type 1)"):
+            if name.endswith(tag):
+                name = name[: -len(tag)].strip()
+        family = name
+        regular = True  # a name with no style word is the regular face
+        while True:
+            lowered = family.lower()
+            for style in _STYLE_WORDS:
+                if lowered.endswith(" " + style):
+                    family = family[: -(len(style) + 1)].strip()
+                    if style not in ("regular", "book", "roman"):
+                        regular = False
+                    break
+            else:
+                break
+        # A family with several faces keeps its regular one; anything else is
+        # only used when no regular face was registered.
+        if family and (family not in found or regular):
+            found[family] = path
+    return found
+
+
+def _registry_fonts():
+    """Family name to file path, from the Windows font registry, once."""
+    global _REGISTRY_FONTS
+    if _REGISTRY_FONTS is None:
+        _REGISTRY_FONTS = (
+            _fonts_from_entries(_registry_entries())
+            if sys.platform.startswith("win")
+            else {}
+        )
+    return _REGISTRY_FONTS
+
+
+def _installed(family):
+    """The file this host has for `family`, wherever the host keeps it."""
+    registered = _registry_fonts()
+    for name, path in registered.items():
+        if name.lower() == family.lower():
+            return path
+    return _existing(_FAMILY_FILES.get(family, ()))
+
+
 def resolve(families, generic=False):
     """The first font file in `families` that this host has, or None.
 
@@ -122,7 +221,7 @@ def resolve(families, generic=False):
     families is installed, which is what the stylesheet falls through to.
     """
     for family in families:
-        path = _existing(_FAMILY_FILES.get(family, ()))
+        path = _installed(family)
         if path is not None:
             return path
     if generic:
@@ -134,8 +233,9 @@ def advance(path, sample, size=SAMPLE_SIZE):
     """Width of one glyph as a fraction of the font size, or None.
 
     The advance of a monospace face is the same for every Latin glyph, so one
-    sample is enough; the CJK face is sampled with a wide character, which is
-    the width a table counts as two columns.
+    sample is enough. The CJK face is sampled the same way, because a table
+    column is one Latin advance wide even when a wide character fills two of
+    them.
     """
     if path is None:
         return None
@@ -175,8 +275,13 @@ def latin_advance():
 
 
 def cjk_advance():
-    """One wide character in the CJK font, as a fraction of the font size."""
-    return _cached("cjk", CJK_FONT, "\u4e2d", FALLBACK_CJK_ADVANCE, _CJK_BOUNDS)
+    """One table column in the CJK font, as a fraction of the font size.
+
+    A wide character is two columns, so the budget needs the width of one
+    Latin column in that font -- 0.5 em for the Noto and Sarasa faces the
+    stylesheet names -- not the width of the wide glyph.
+    """
+    return _cached("cjk", CJK_FONT, "M", FALLBACK_CJK_ADVANCE, _CJK_BOUNDS)
 
 
 def cjk_ships():
